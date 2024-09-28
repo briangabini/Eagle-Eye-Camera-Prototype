@@ -11,6 +11,7 @@ import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.CameraAccessException
 import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
@@ -44,6 +45,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.sharp.FlipCameraAndroid
 import androidx.compose.material.icons.sharp.Lens
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -80,6 +82,7 @@ class MainActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var cameraId: String = ""
     private var latestImagePath: String? by mutableStateOf(null)
+    private var isUsingFrontCamera = false
 
 
     private val permissionsRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
@@ -154,6 +157,7 @@ class MainActivity : ComponentActivity() {
                     .align(Alignment.BottomCenter)
                     .background(Color.Black.copy(alpha = 0.5f))
             ) {
+                // Capture button
                 IconButton(
                     onClick = {
                         captureBurstImages() // Capture burst images when clicked
@@ -172,6 +176,25 @@ class MainActivity : ComponentActivity() {
                             .size(80.dp)
                             .padding(1.dp)
                             .border(1.dp, Color.White, CircleShape)
+                    )
+                }
+
+                // Camera flip button
+                IconButton(
+                    onClick = {
+                        flipCamera() // Flip the camera when clicked
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(60.dp)
+                        .padding(8.dp)
+                        .clip(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Sharp.FlipCameraAndroid,
+                        contentDescription = "Flip Camera",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
                     )
                 }
 
@@ -206,11 +229,26 @@ class MainActivity : ComponentActivity() {
 
     private fun setUpCamera() {
         cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-        cameraId = cameraManager.cameraIdList[0] // Select the first camera (usually rear)
+        cameraId = if (isUsingFrontCamera) {
+            cameraManager.cameraIdList.first { id ->
+                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+            }
+        } else {
+            cameraManager.cameraIdList.first { id ->
+                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+            }
+        }
 
         // Initialize the ImageReader to capture the image
         imageReader = android.media.ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 10)
     }
+
+    private fun flipCamera() {
+        closeCamera() // Close the current camera
+        isUsingFrontCamera = !isUsingFrontCamera // Toggle the camera
+        startCameraPreview() // Restart the camera preview
+    }
+
 
     private fun openCamera() {
         try {
@@ -447,6 +485,11 @@ class MainActivity : ComponentActivity() {
             Surface.ROTATION_90 -> matrix.postRotate(0f)
             Surface.ROTATION_180 -> matrix.postRotate(270f)
             Surface.ROTATION_270 -> matrix.postRotate(180f)
+        }
+
+        // Additional rotation for the front camera
+        if (isUsingFrontCamera) {
+            matrix.postRotate(180f) // Rotate 180 degrees counterclockwise
         }
 
         return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
