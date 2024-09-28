@@ -1,6 +1,7 @@
 package com.eagleeye.prototype
 
 import android.Manifest
+import android.content.ContentValues
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
@@ -22,6 +23,7 @@ import android.os.Bundle
 import android.os.Environment
 import android.os.Handler
 import android.os.Looper
+import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -150,7 +152,8 @@ class MainActivity : ComponentActivity() {
             ) {
                 IconButton(
                     onClick = {
-                        captureImage() // Capture image when clicked
+//                        captureImage() // Capture image when clicked
+                        captureBurstImages()
                     },
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -199,7 +202,7 @@ class MainActivity : ComponentActivity() {
         cameraId = cameraManager.cameraIdList[0] // Select the first camera (usually rear)
 
         // Initialize the ImageReader to capture the image
-        imageReader = android.media.ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 1)
+        imageReader = android.media.ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 10)
     }
 
     private fun openCamera() {
@@ -265,6 +268,41 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun captureBurstImages() {
+        try {
+            val burstCaptureRequests = mutableListOf<CaptureRequest>()
+            for (i in 0 until 10) { // Capture 10 images in burst
+                val captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
+                captureRequestBuilder.addTarget(imageReader.surface)
+                burstCaptureRequests.add(captureRequestBuilder.build())
+            }
+
+            imageReader.setOnImageAvailableListener({ reader ->
+                var image = reader.acquireNextImage() // Use acquireNextImage instead of acquireLatestImage to avoid skipping images
+                if (image != null) {
+                    val buffer = image.planes[0].buffer
+                    val bytes = ByteArray(buffer.remaining())
+                    buffer.get(bytes)
+
+                    // Save the image with proper orientation
+                    saveImage(bytes)
+                    image.close() // Release image immediately after processing
+                }
+            }, handler)
+
+            cameraCaptureSession.captureBurst(burstCaptureRequests, object : CameraCaptureSession.CaptureCallback() {
+                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
+                    super.onCaptureCompleted(session, request, result)
+                    Toast.makeText(this@MainActivity, "Burst Image Captured", Toast.LENGTH_SHORT).show()
+                }
+            }, handler)
+        } catch (e: CameraAccessException) {
+            Log.e("CameraError", "Error capturing burst images", e)
+        }
+    }
+
+
+
     private fun captureImage() {
         try {
             val captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
@@ -291,7 +329,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun saveImage(bytes: ByteArray) {
+    /*private fun saveImage(bytes: ByteArray) {
         // Convert byte array to Bitmap
         val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
 
@@ -307,7 +345,47 @@ class MainActivity : ComponentActivity() {
 
         // Update the latestImagePath with the saved image's path
         latestImagePath = file.absolutePath
+    }*/
+
+    private fun saveImage(bytes: ByteArray) {
+        Thread {
+            // Convert byte array to Bitmap
+            val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+            // Adjust the orientation of the image
+            val rotatedBitmap = adjustImageRotation(originalBitmap)
+
+            // Prepare to save the image in the public Pictures directory
+            val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())}.jpg"
+            val resolver = contentResolver
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
+                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/EagleEye") // Save in Pictures/EagleEye folder
+                put(MediaStore.Images.Media.IS_PENDING, 1) // For API 29+
+            }
+
+            val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+
+            // Save the image to the gallery
+            imageUri?.let { uri ->
+                resolver.openOutputStream(uri).use { outputStream ->
+                    if (outputStream != null) {
+                        rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
+                        outputStream.flush()
+                        contentValues.clear()
+                        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0) // Mark image as ready for viewing
+                        resolver.update(uri, contentValues, null, null) // For API 29+
+                        latestImagePath = uri.toString() // Store the URI path for the latest image
+                    } else {
+                        Log.e("SaveImageError", "Failed to save image")
+                    }
+                }
+            }
+        }.start()
     }
+
+
 
 
     // Function to adjust image rotation based on device orientation
@@ -365,6 +443,11 @@ class MainActivity : ComponentActivity() {
         } catch (e: Exception) {
             Log.e("CameraError", "Error closing camera", e)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        startCameraPreview()
     }
 
     override fun onPause() {
