@@ -55,6 +55,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
@@ -155,8 +156,7 @@ class MainActivity : ComponentActivity() {
             ) {
                 IconButton(
                     onClick = {
-//                        captureImage() // Capture image when clicked
-                        captureBurstImages()
+                        captureBurstImages() // Capture burst images when clicked
                     },
                     modifier = Modifier
                         .align(Alignment.Center)
@@ -174,32 +174,34 @@ class MainActivity : ComponentActivity() {
                             .border(1.dp, Color.White, CircleShape)
                     )
                 }
-            }
 
-            // Display the captured image thumbnail using Coil
-            // Display the captured image thumbnail using Coil
-            latestImagePath?.let { path ->
-                Box(
-                    modifier = Modifier
-                        .align(Alignment.BottomStart)
-                        .padding(16.dp)
-                        .size(80.dp)
-                        .clip(CircleShape)
-                        .background(Color.Gray)
-                        .clickable { openGallery() } // Opens gallery when clicked
-                ) {
-                    Image(
-                        painter = rememberAsyncImagePainter(model = path), // Use the URI directly
-                        contentDescription = "Captured Image",
+                // Display the captured image thumbnail using Coil
+                latestImagePath?.let { path ->
+                    Box(
                         modifier = Modifier
-                            .size(80.dp)
-                            .clip(CircleShape)
-                    )
+                            .align(Alignment.CenterStart) // Vertically centered within the bottom box
+                            .padding(start = 16.dp)
+                            .size(60.dp) // Adjust the size as desired
+                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) // Make it square with rounded corners
+                            .background(Color.Gray)
+                            .clickable { openGallery() } // Opens gallery when clicked
+                    ) {
+                        Image(
+                            painter = rememberAsyncImagePainter(model = path), // Use the URI directly
+                            contentDescription = "Captured Image",
+                            contentScale = ContentScale.Crop, // Ensure the image is cropped to fit the square
+                            modifier = Modifier
+                                .fillMaxSize() // Ensure it fills the square box
+                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) // Ensure image fits square box with rounded corners
+                        )
+                    }
                 }
             }
-
         }
     }
+
+
+
 
 
     private fun setUpCamera() {
@@ -307,7 +309,7 @@ class MainActivity : ComponentActivity() {
 
     private fun captureBurstImages() {
         if (!::cameraDevice.isInitialized) {
-            Toast.makeText(this, "Camera is not ready", Toast.LENGTH_SHORT).show()
+            showToastAtTop("Camera is not ready")
             return
         }
         try {
@@ -334,7 +336,7 @@ class MainActivity : ComponentActivity() {
             cameraCaptureSession.captureBurst(burstCaptureRequests, object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
-                    Toast.makeText(this@MainActivity, "Burst Image Captured", Toast.LENGTH_SHORT).show()
+                    showToastAtTop("Burst Image Captured")
                 }
             }, handler)
         } catch (e: CameraAccessException) {
@@ -363,7 +365,7 @@ class MainActivity : ComponentActivity() {
             cameraCaptureSession.capture(captureRequestBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
-                    Toast.makeText(this@MainActivity, "Image Captured", Toast.LENGTH_SHORT).show()
+                    showToastAtTop("Image Captured")
                 }
             }, null)
         } catch (e: CameraAccessException) {
@@ -471,9 +473,9 @@ class MainActivity : ComponentActivity() {
             try {
                 startActivity(intent)
             } catch (e: Exception) {
-                Toast.makeText(this, "Unable to open image", Toast.LENGTH_SHORT).show()
+                showToastAtTop("Unable to open image")
             }
-        } ?: Toast.makeText(this, "No image available", Toast.LENGTH_SHORT).show()
+        } ?: showToastAtTop("No image available")
     }
 
     // clean up
@@ -493,6 +495,11 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private fun showToastAtTop(message: String) {
+        val toast = Toast.makeText(this, message, Toast.LENGTH_SHORT)
+        toast.setGravity(android.view.Gravity.TOP or android.view.Gravity.CENTER_HORIZONTAL, 0, 100) // Adjust the offset as needed
+        toast.show()
+    }
 
     override fun onResume() {
         super.onResume()
