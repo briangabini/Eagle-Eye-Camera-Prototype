@@ -3,7 +3,10 @@ package com.eagleeye.prototype
 import android.Manifest
 import android.content.ContentValues
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
+import android.graphics.Matrix
 import android.graphics.SurfaceTexture
 import android.hardware.camera2.*
 import android.os.Bundle
@@ -184,6 +187,7 @@ class MainActivity : ComponentActivity() {
                 val bytes = ByteArray(buffer.remaining())
                 buffer.get(bytes)
 
+                // Save the image with proper orientation
                 saveImage(bytes)
                 image.close()
             }, null)
@@ -200,6 +204,12 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun saveImage(bytes: ByteArray) {
+        // Convert byte array to Bitmap
+        val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+
+        // Adjust the orientation of the image
+        val rotatedBitmap = adjustImageRotation(originalBitmap)
+
         val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
         val outputStream: OutputStream?
         val resolver = contentResolver
@@ -213,9 +223,25 @@ class MainActivity : ComponentActivity() {
         outputStream = imageUri?.let { resolver.openOutputStream(it) }
 
         outputStream?.use {
-            it.write(bytes)
+            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
             it.close()
         }
+    }
+
+    // Function to adjust image rotation based on device orientation
+    private fun adjustImageRotation(bitmap: Bitmap): Bitmap {
+        val rotation = windowManager.defaultDisplay.rotation
+        val matrix = Matrix()
+
+        // Adjust the matrix to correct the image orientation
+        when (rotation) {
+            Surface.ROTATION_0 -> matrix.postRotate(90f)
+            Surface.ROTATION_90 -> matrix.postRotate(0f)
+            Surface.ROTATION_180 -> matrix.postRotate(270f)
+            Surface.ROTATION_270 -> matrix.postRotate(180f)
+        }
+
+        return Bitmap.createBitmap(bitmap, 0, 0, bitmap.width, bitmap.height, matrix, true)
     }
 
     private fun startCameraPreview() {
