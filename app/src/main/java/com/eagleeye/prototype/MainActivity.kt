@@ -1,17 +1,22 @@
 package com.eagleeye.prototype
 
 import android.Manifest
-import android.content.ContentValues
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.ImageFormat
 import android.graphics.Matrix
 import android.graphics.SurfaceTexture
-import android.hardware.camera2.*
+import android.hardware.camera2.CameraAccessException
+import android.hardware.camera2.CameraCaptureSession
+import android.hardware.camera2.CameraDevice
+import android.hardware.camera2.CameraManager
+import android.hardware.camera2.CameraMetadata
+import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.TotalCaptureResult
 import android.os.Bundle
 import android.os.Environment
-import android.provider.MediaStore
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -19,17 +24,25 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.sharp.Lens
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -37,10 +50,14 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.core.content.FileProvider
+import coil.compose.rememberImagePainter
 import com.eagleeye.prototype.ui.theme.CameraPrototypeTheme
-import java.io.OutputStream
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
-import java.util.*
+import java.util.Date
+import java.util.Locale
 
 class MainActivity : ComponentActivity() {
 
@@ -51,6 +68,8 @@ class MainActivity : ComponentActivity() {
     private lateinit var textureView: TextureView
     private lateinit var imageReader: android.media.ImageReader
     private var cameraId: String = ""
+    private var latestImagePath: String? by mutableStateOf(null)
+
 
     private val permissionsRequest = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { permissions ->
         permissions.entries.forEach { permission ->
@@ -118,33 +137,55 @@ class MainActivity : ComponentActivity() {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp) // Adjust height as needed
+                    .height(120.dp)
                     .align(Alignment.BottomCenter)
-                    .background(Color.Black.copy(alpha = 0.5f)) // Semi-transparent background
+                    .background(Color.Black.copy(alpha = 0.5f))
             ) {
                 IconButton(
                     onClick = {
                         captureImage() // Capture image when clicked
                     },
                     modifier = Modifier
-                        .align(Alignment.Center) // Center the button within the container
-                        .size(100.dp) // Set size of the icon button
+                        .align(Alignment.Center)
+                        .size(100.dp)
                         .padding(8.dp)
-                        .clip(CircleShape) // Clip to make it circular
+                        .clip(CircleShape)
                 ) {
                     Icon(
                         imageVector = Icons.Sharp.Lens,
                         contentDescription = "Take picture",
                         tint = Color.White,
                         modifier = Modifier
-                            .size(80.dp) // Set size of the icon
+                            .size(80.dp)
                             .padding(1.dp)
                             .border(1.dp, Color.White, CircleShape)
                     )
                 }
             }
+
+            // Display the captured image thumbnail using Coil
+            latestImagePath?.let { path ->
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(16.dp)
+                        .size(80.dp)
+                        .clip(CircleShape)
+                        .background(Color.Gray)
+                        .clickable { openGallery() } // Opens gallery when clicked
+                ) {
+                    Image(
+                        painter = rememberImagePainter(data = File(path)), // Coil to load the image from the file path
+                        contentDescription = "Captured Image",
+                        modifier = Modifier
+                            .size(80.dp)
+                            .clip(CircleShape)
+                    )
+                }
+            }
         }
     }
+
 
     private fun setUpCamera() {
         cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
@@ -240,22 +281,16 @@ class MainActivity : ComponentActivity() {
         val rotatedBitmap = adjustImageRotation(originalBitmap)
 
         val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
-        val outputStream: OutputStream?
-        val resolver = contentResolver
-        val contentValues = ContentValues().apply {
-            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
-            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
-            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+        val file = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), filename)
+
+        FileOutputStream(file).use { outputStream ->
+            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
         }
 
-        val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-        outputStream = imageUri?.let { resolver.openOutputStream(it) }
-
-        outputStream?.use {
-            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, it)
-            it.close()
-        }
+        // Update the latestImagePath with the saved image's path
+        latestImagePath = file.absolutePath
     }
+
 
     // Function to adjust image rotation based on device orientation
     private fun adjustImageRotation(bitmap: Bitmap): Bitmap {
@@ -279,6 +314,29 @@ class MainActivity : ComponentActivity() {
             openCamera()
         }
     }
+
+    private fun openGallery() {
+        latestImagePath?.let { path ->
+            val file = File(path)
+            val uri = FileProvider.getUriForFile(
+                this,
+                "${applicationContext.packageName}.provider", // Ensure this matches what's defined in AndroidManifest
+                file
+            )
+
+            val intent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(uri, "image/*")
+                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // Grant temporary read permission
+            }
+
+            try {
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Unable to open image", Toast.LENGTH_SHORT).show()
+            }
+        } ?: Toast.makeText(this, "No image available", Toast.LENGTH_SHORT).show()
+    }
+
 
     override fun onDestroy() {
         super.onDestroy()
