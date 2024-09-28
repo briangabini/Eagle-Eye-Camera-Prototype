@@ -59,6 +59,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
+import coil.compose.rememberAsyncImagePainter
 import coil.compose.rememberImagePainter
 import com.eagleeye.prototype.ui.theme.CameraPrototypeTheme
 import java.io.File
@@ -114,6 +115,7 @@ class MainActivity : ComponentActivity() {
 
         if (allPermissionsGranted) {
             startCameraPreview()
+            fetchLatestImageFromGallery()
         } else {
             permissionsRequest.launch(permissions)
         }
@@ -136,6 +138,7 @@ class MainActivity : ComponentActivity() {
             textureView
         }, modifier = Modifier.fillMaxSize())
     }
+
 
     @Composable
     fun CameraScreen() {
@@ -174,6 +177,7 @@ class MainActivity : ComponentActivity() {
             }
 
             // Display the captured image thumbnail using Coil
+            // Display the captured image thumbnail using Coil
             latestImagePath?.let { path ->
                 Box(
                     modifier = Modifier
@@ -185,7 +189,7 @@ class MainActivity : ComponentActivity() {
                         .clickable { openGallery() } // Opens gallery when clicked
                 ) {
                     Image(
-                        painter = rememberImagePainter(data = File(path)), // Coil to load the image from the file path
+                        painter = rememberAsyncImagePainter(model = path), // Use the URI directly
                         contentDescription = "Captured Image",
                         modifier = Modifier
                             .size(80.dp)
@@ -193,6 +197,7 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+
         }
     }
 
@@ -228,6 +233,38 @@ class MainActivity : ComponentActivity() {
             Log.e("CameraError", "Failed to open camera", e)
         }
     }
+
+    private fun fetchLatestImageFromGallery() {
+        val projection = arrayOf(
+            MediaStore.Images.Media._ID,
+            MediaStore.Images.Media.DISPLAY_NAME,
+            MediaStore.Images.Media.DATE_ADDED
+        )
+
+        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
+
+        val query = contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            null,
+            null,
+            sortOrder
+        )
+
+        query?.use { cursor ->
+            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
+
+            if (cursor.moveToFirst()) {
+                val id = cursor.getLong(idColumn)
+                val contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI.buildUpon()
+                    .appendPath(id.toString()).build()
+
+                latestImagePath = contentUri.toString() // Update the latestImagePath with the URI
+            }
+        }
+    }
+
+
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun createCameraPreviewSession() {
@@ -269,6 +306,10 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun captureBurstImages() {
+        if (!::cameraDevice.isInitialized) {
+            Toast.makeText(this, "Camera is not ready", Toast.LENGTH_SHORT).show()
+            return
+        }
         try {
             val burstCaptureRequests = mutableListOf<CaptureRequest>()
             for (i in 0 until 10) { // Capture 10 images in burst
@@ -278,7 +319,7 @@ class MainActivity : ComponentActivity() {
             }
 
             imageReader.setOnImageAvailableListener({ reader ->
-                var image = reader.acquireNextImage() // Use acquireNextImage instead of acquireLatestImage to avoid skipping images
+                val image = reader.acquireNextImage() // Use acquireNextImage instead of acquireLatestImage
                 if (image != null) {
                     val buffer = image.planes[0].buffer
                     val bytes = ByteArray(buffer.remaining())
@@ -300,6 +341,7 @@ class MainActivity : ComponentActivity() {
             Log.e("CameraError", "Error capturing burst images", e)
         }
     }
+
 
 
 
@@ -377,6 +419,9 @@ class MainActivity : ComponentActivity() {
                         contentValues.put(MediaStore.Images.Media.IS_PENDING, 0) // Mark image as ready for viewing
                         resolver.update(uri, contentValues, null, null) // For API 29+
                         latestImagePath = uri.toString() // Store the URI path for the latest image
+
+                        // Fetch the latest image from the gallery
+                        fetchLatestImageFromGallery()
                     } else {
                         Log.e("SaveImageError", "Failed to save image")
                     }
@@ -384,6 +429,7 @@ class MainActivity : ComponentActivity() {
             }
         }.start()
     }
+
 
 
 
@@ -405,20 +451,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCameraPreview() {
-        if (::textureView.isInitialized && textureView.isAvailable && !::cameraDevice.isInitialized) {
+        if (::textureView.isInitialized && textureView.isAvailable) {
             setUpCamera()
             openCamera()
         }
     }
 
+
+
     private fun openGallery() {
         latestImagePath?.let { path ->
-            val file = File(path)
-            val uri = FileProvider.getUriForFile(
-                this,
-                "${applicationContext.packageName}.provider", // Ensure this matches what's defined in AndroidManifest
-                file
-            )
+            val uri = android.net.Uri.parse(path) // Parse the content URI
 
             val intent = Intent(Intent.ACTION_VIEW).apply {
                 setDataAndType(uri, "image/*")
@@ -433,30 +476,44 @@ class MainActivity : ComponentActivity() {
         } ?: Toast.makeText(this, "No image available", Toast.LENGTH_SHORT).show()
     }
 
-
     // clean up
     private fun closeCamera() {
         try {
-            cameraCaptureSession?.close()
-            cameraDevice?.close()
-            imageReader?.close()
+            if (::cameraCaptureSession.isInitialized) {
+                cameraCaptureSession.close()
+            }
+            if (::cameraDevice.isInitialized) {
+                cameraDevice.close()
+            }
+            if (::imageReader.isInitialized) {
+                imageReader.close()
+            }
         } catch (e: Exception) {
             Log.e("CameraError", "Error closing camera", e)
         }
     }
 
+
     override fun onResume() {
         super.onResume()
-        startCameraPreview()
+        if (::textureView.isInitialized && textureView.isAvailable) {
+            startCameraPreview()
+        }
     }
+
 
     override fun onPause() {
         super.onPause()
-        closeCamera()
+        if (::cameraDevice.isInitialized) {
+            closeCamera()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        closeCamera()
+        if (::cameraDevice.isInitialized) {
+            closeCamera()
+        }
     }
+
 }
