@@ -15,8 +15,13 @@ import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CameraMetadata
 import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
+import android.hardware.camera2.params.OutputConfiguration
+import android.hardware.camera2.params.SessionConfiguration
+import android.os.Build
 import android.os.Bundle
 import android.os.Environment
+import android.os.Handler
+import android.os.Looper
 import android.util.Log
 import android.view.Surface
 import android.view.TextureView
@@ -24,6 +29,7 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.annotation.RequiresApi
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -67,6 +73,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var cameraCaptureSession: CameraCaptureSession
     private lateinit var textureView: TextureView
     private lateinit var imageReader: android.media.ImageReader
+    private val handler = Handler(Looper.getMainLooper())
     private var cameraId: String = ""
     private var latestImagePath: String? by mutableStateOf(null)
 
@@ -199,6 +206,7 @@ class MainActivity : ComponentActivity() {
         try {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
                 cameraManager.openCamera(cameraId, object : CameraDevice.StateCallback() {
+                    @RequiresApi(Build.VERSION_CODES.P)
                     override fun onOpened(camera: CameraDevice) {
                         cameraDevice = camera
                         createCameraPreviewSession()
@@ -218,6 +226,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @RequiresApi(Build.VERSION_CODES.P)
     private fun createCameraPreviewSession() {
         try {
             val surfaceTexture = textureView.surfaceTexture
@@ -227,21 +236,30 @@ class MainActivity : ComponentActivity() {
             captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
             captureRequestBuilder.addTarget(previewSurface)
 
-            cameraDevice.createCaptureSession(
-                listOf(previewSurface, imageReader.surface),
+            // Create OutputConfiguration objects
+            val outputConfigurations = listOf(
+                OutputConfiguration(previewSurface),
+                OutputConfiguration(imageReader.surface)
+            )
+
+            val sessionConfiguration = SessionConfiguration(
+                SessionConfiguration.SESSION_REGULAR,
+                outputConfigurations,
+                ContextCompat.getMainExecutor(this), // Use Executor instead of Handler
                 object : CameraCaptureSession.StateCallback() {
                     override fun onConfigured(session: CameraCaptureSession) {
                         cameraCaptureSession = session
                         captureRequestBuilder.set(CaptureRequest.CONTROL_MODE, CameraMetadata.CONTROL_MODE_AUTO)
-                        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, null)
+                        cameraCaptureSession.setRepeatingRequest(captureRequestBuilder.build(), null, handler)
                     }
 
                     override fun onConfigureFailed(session: CameraCaptureSession) {
                         Log.e("CameraError", "Failed to configure camera preview")
                     }
-                },
-                null
+                }
             )
+
+            cameraDevice.createCaptureSession(sessionConfiguration)
         } catch (e: CameraAccessException) {
             Log.e("CameraError", "Failed to create camera preview session", e)
         }
@@ -309,7 +327,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startCameraPreview() {
-        if (::textureView.isInitialized && textureView.isAvailable) {
+        if (::textureView.isInitialized && textureView.isAvailable && !::cameraDevice.isInitialized) {
             setUpCamera()
             openCamera()
         }
@@ -338,8 +356,24 @@ class MainActivity : ComponentActivity() {
     }
 
 
+    // clean up
+    private fun closeCamera() {
+        try {
+            cameraCaptureSession?.close()
+            cameraDevice?.close()
+            imageReader?.close()
+        } catch (e: Exception) {
+            Log.e("CameraError", "Error closing camera", e)
+        }
+    }
+
+    override fun onPause() {
+        super.onPause()
+        closeCamera()
+    }
+
     override fun onDestroy() {
         super.onDestroy()
-        cameraDevice.close() // Clean up the camera resources
+        closeCamera()
     }
 }
