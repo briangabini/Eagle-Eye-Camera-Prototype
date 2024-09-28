@@ -19,19 +19,25 @@ import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.text.BasicText
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.sharp.Lens
 import androidx.compose.material3.Button
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import com.eagleeye.prototype.ui.theme.CameraPrototypeTheme
-import java.io.File
-import java.io.FileOutputStream
 import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.*
@@ -63,7 +69,7 @@ class MainActivity : ComponentActivity() {
             CameraPrototypeTheme {
                 Box(modifier = Modifier.fillMaxSize()) {
                     CameraPreview()
-                    CaptureButton()
+                    CameraScreen()
                 }
             }
         }
@@ -104,15 +110,38 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
-    fun CaptureButton() {
-        Box(
-            contentAlignment = Alignment.BottomCenter,
-            modifier = Modifier.fillMaxSize().padding(bottom = 16.dp)
-        ) {
-            Button(onClick = {
-                captureImage()
-            }) {
-                Text(text = "Capture Image")
+    fun CameraScreen() {
+        Box(modifier = Modifier.fillMaxSize()) {
+            CameraPreview()
+
+            // Semi-transparent container for the capture button
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(120.dp) // Adjust height as needed
+                    .align(Alignment.BottomCenter)
+                    .background(Color.Black.copy(alpha = 0.5f)) // Semi-transparent background
+            ) {
+                IconButton(
+                    onClick = {
+                        captureImage() // Capture image when clicked
+                    },
+                    modifier = Modifier
+                        .align(Alignment.Center) // Center the button within the container
+                        .size(100.dp) // Set size of the icon button
+                        .padding(8.dp)
+                        .clip(CircleShape) // Clip to make it circular
+                ) {
+                    Icon(
+                        imageVector = Icons.Sharp.Lens,
+                        contentDescription = "Take picture",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(80.dp) // Set size of the icon
+                            .padding(1.dp)
+                            .border(1.dp, Color.White, CircleShape)
+                    )
+                }
             }
         }
     }
