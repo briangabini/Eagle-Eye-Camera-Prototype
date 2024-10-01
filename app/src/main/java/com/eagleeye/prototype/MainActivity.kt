@@ -19,6 +19,7 @@ import android.hardware.camera2.CaptureRequest
 import android.hardware.camera2.TotalCaptureResult
 import android.hardware.camera2.params.OutputConfiguration
 import android.hardware.camera2.params.SessionConfiguration
+import android.media.ImageReader
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
@@ -33,17 +34,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.RequiresApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.sharp.FlipCameraAndroid
 import androidx.compose.material.icons.sharp.Lens
@@ -56,17 +60,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
-import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
-import coil.compose.rememberImagePainter
 import com.eagleeye.prototype.ui.theme.CameraPrototypeTheme
-import java.io.File
-import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -78,7 +80,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var captureRequestBuilder: CaptureRequest.Builder
     private lateinit var cameraCaptureSession: CameraCaptureSession
     private lateinit var textureView: TextureView
-    private lateinit var imageReader: android.media.ImageReader
+    private lateinit var imageReader: ImageReader
     private val handler = Handler(Looper.getMainLooper())
     private var cameraId: String = ""
     private var latestImagePath: String? by mutableStateOf(null)
@@ -101,7 +103,6 @@ class MainActivity : ComponentActivity() {
         setContent {
             CameraPrototypeTheme {
                 Box(modifier = Modifier.fillMaxSize()) {
-                    CameraPreview()
                     CameraScreen()
                 }
             }
@@ -143,19 +144,25 @@ class MainActivity : ComponentActivity() {
         }, modifier = Modifier.fillMaxSize())
     }
 
-
     @Composable
     fun CameraScreen() {
-        Box(modifier = Modifier.fillMaxSize()) {
-            CameraPreview()
+        Column(modifier = Modifier.fillMaxSize()) {
+            // Container Box for CameraPreview and GridOverlay
+            Box(
+                modifier = Modifier
+                    .weight(1f) // This makes the box take up all available space except the height of the bottom box
+                    .fillMaxWidth()
+            ) {
+                CameraPreview() // Camera preview
+                GridOverlay()   // Grid overlay on top of the preview
+            }
 
-            // Semi-transparent container for the capture button
+            // Semi-transparent container for the capture button and other UI elements
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(120.dp)
-                    .align(Alignment.BottomCenter)
-                    .background(Color.Black.copy(alpha = 0.5f))
+                    .height(120.dp) // Height of the bottom box
+                    .background(Color.Black)
             ) {
                 // Capture button
                 IconButton(
@@ -186,8 +193,8 @@ class MainActivity : ComponentActivity() {
                     },
                     modifier = Modifier
                         .align(Alignment.CenterEnd)
-                        .size(60.dp)
-                        .padding(8.dp)
+                        .size(72.dp)
+                        .padding(end = 16.dp)
                         .clip(CircleShape)
                 ) {
                     Icon(
@@ -205,7 +212,7 @@ class MainActivity : ComponentActivity() {
                             .align(Alignment.CenterStart) // Vertically centered within the bottom box
                             .padding(start = 16.dp)
                             .size(60.dp) // Adjust the size as desired
-                            .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) // Make it square with rounded corners
+                            .clip(RoundedCornerShape(8.dp)) // Make it square with rounded corners
                             .background(Color.Gray)
                             .clickable { openGallery() } // Opens gallery when clicked
                     ) {
@@ -215,10 +222,53 @@ class MainActivity : ComponentActivity() {
                             contentScale = ContentScale.Crop, // Ensure the image is cropped to fit the square
                             modifier = Modifier
                                 .fillMaxSize() // Ensure it fills the square box
-                                .clip(androidx.compose.foundation.shape.RoundedCornerShape(8.dp)) // Ensure image fits square box with rounded corners
+                                .clip(RoundedCornerShape(8.dp)) // Ensure image fits square box with rounded corners
                         )
                     }
                 }
+            }
+        }
+    }
+
+    @Composable
+    fun GridOverlay(
+        lineColor: Color = Color.White.copy(alpha = 0.6f), // Color of grid lines
+        lineWidth: Float = 2f, // Width of grid lines
+        bottomBoxHeight: Float = 120f // Height of the bottom box in dp
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            // Calculate the available height excluding the bottom box
+            val availableHeight = size.height
+
+            // Use the full available width for the grid
+            val availableWidth = size.width
+
+            // Calculate the width of each column and height of each row
+            val columnWidth = availableWidth / 3
+            val rowHeight = availableHeight / 3
+
+            // Draw vertical lines
+            for (i in 1 until 3) {
+                val x = columnWidth * i
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, availableHeight),
+                    strokeWidth = lineWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            // Draw horizontal lines
+            for (i in 1 until 3) {
+                val y = rowHeight * i
+                drawLine(
+                    color = lineColor,
+                    start = Offset(0f, y),
+                    end = Offset(availableWidth, y),
+                    strokeWidth = lineWidth,
+                    cap = StrokeCap.Round
+                )
             }
         }
     }
@@ -227,20 +277,46 @@ class MainActivity : ComponentActivity() {
 
 
 
+
+
     private fun setUpCamera() {
         cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
-        cameraId = if (isUsingFrontCamera) {
-            cameraManager.cameraIdList.first { id ->
-                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+        try {
+            cameraId = if (isUsingFrontCamera) {
+                cameraManager.cameraIdList.first { id ->
+                    cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_FRONT
+                }
+            } else {
+                cameraManager.cameraIdList.first { id ->
+                    cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
+                }
             }
-        } else {
-            cameraManager.cameraIdList.first { id ->
-                cameraManager.getCameraCharacteristics(id).get(CameraCharacteristics.LENS_FACING) == CameraCharacteristics.LENS_FACING_BACK
-            }
-        }
 
-        // Initialize the ImageReader to capture the image
-        imageReader = android.media.ImageReader.newInstance(1920, 1080, ImageFormat.JPEG, 10)
+            val characteristics = cameraManager.getCameraCharacteristics(cameraId)
+            val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
+
+            if (map != null) {
+                // Get the available sizes for the JPEG format
+                val outputSizes = map.getOutputSizes(ImageFormat.JPEG)
+
+                // Select the largest available size
+                val maxSize = outputSizes?.maxByOrNull { it.width * it.height }
+
+                maxSize?.let { selectedSize ->
+                    Log.d("Camera", "Max resolution: ${selectedSize.width}x${selectedSize.height}")
+
+                    // Update the ImageReader with the maximum resolution
+                    imageReader = android.media.ImageReader.newInstance(selectedSize.width, selectedSize.height, ImageFormat.JPEG, 10)
+
+                    // Set the preview size to match the max resolution
+                    textureView.surfaceTexture?.setDefaultBufferSize(selectedSize.width, selectedSize.height)
+                }
+            } else {
+                Log.e("CameraError", "No supported sizes found")
+            }
+        } catch (e: CameraAccessException) {
+            Log.e("CameraError", "Failed to access camera characteristics", e)
+        }
     }
 
     private fun flipCamera() {
@@ -374,9 +450,9 @@ class MainActivity : ComponentActivity() {
             cameraCaptureSession.captureBurst(burstCaptureRequests, object : CameraCaptureSession.CaptureCallback() {
                 override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
                     super.onCaptureCompleted(session, request, result)
-                    showToastAtTop("Burst Image Captured")
                 }
             }, handler)
+            showToastAtTop("Burst Image Captured")
         } catch (e: CameraAccessException) {
             Log.e("CameraError", "Error capturing burst images", e)
         }
@@ -550,7 +626,6 @@ class MainActivity : ComponentActivity() {
             startCameraPreview()
         }
     }
-
 
     override fun onPause() {
         super.onPause()
