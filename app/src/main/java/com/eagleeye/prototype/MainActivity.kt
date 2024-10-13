@@ -129,6 +129,49 @@ class MainActivity : ComponentActivity() {
     }
 
     @Composable
+    fun GridOverlay(
+        lineColor: Color = Color.White.copy(alpha = 0.6f), // Color of grid lines
+        lineWidth: Float = 2f, // Width of grid lines
+        bottomBoxHeight: Float = 120f // Height of the bottom box in dp
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            // Calculate the available height excluding the bottom box
+            val availableHeight = size.height
+
+            // Use the full available width for the grid
+            val availableWidth = size.width
+
+            // Calculate the width of each column and height of each row
+            val columnWidth = availableWidth / 3
+            val rowHeight = availableHeight / 3
+
+            // Draw vertical lines
+            for (i in 1 until 3) {
+                val x = columnWidth * i
+                drawLine(
+                    color = lineColor,
+                    start = Offset(x, 0f),
+                    end = Offset(x, availableHeight),
+                    strokeWidth = lineWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+
+            // Draw horizontal lines
+            for (i in 1 until 3) {
+                val y = rowHeight * i
+                drawLine(
+                    color = lineColor,
+                    start = Offset(0f, y),
+                    end = Offset(availableWidth, y),
+                    strokeWidth = lineWidth,
+                    cap = StrokeCap.Round
+                )
+            }
+        }
+    }
+
+    @Composable
     fun CameraPreview() {
         AndroidView(factory = { context ->
             textureView = TextureView(context)
@@ -156,7 +199,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxWidth()
             ) {
                 CameraPreview() // Camera preview
-//                GridOverlay()   // Grid overlay on top of the preview
+                GridOverlay()   // Grid overlay on top of the preview
             }
 
             // Semi-transparent container for the capture button and other UI elements
@@ -187,8 +230,33 @@ class MainActivity : ComponentActivity() {
                             .border(1.dp, Color.White, CircleShape)
                     )
                 }
+
+                // Camera flip button
+                IconButton(
+                    onClick = {
+                        flipCamera() // Flip the camera when clicked
+                    },
+                    modifier = Modifier
+                        .align(Alignment.CenterEnd)
+                        .size(72.dp)
+                        .padding(end = 16.dp)
+                        .clip(CircleShape)
+                ) {
+                    Icon(
+                        imageVector = Icons.Sharp.FlipCameraAndroid,
+                        contentDescription = "Flip Camera",
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp)
+                    )
+                }
             }
         }
+    }
+
+    private fun flipCamera() {
+        closeCamera() // Close the current camera
+        isUsingFrontCamera = !isUsingFrontCamera // Toggle the camera
+        startCameraPreview() // Restart the camera preview
     }
 
     private fun setUpCamera() {
