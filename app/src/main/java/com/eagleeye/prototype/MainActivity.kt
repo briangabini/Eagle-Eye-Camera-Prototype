@@ -69,6 +69,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
 import coil.compose.rememberAsyncImagePainter
 import com.eagleeye.prototype.ui.theme.CameraPrototypeTheme
+import java.io.File
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -120,7 +122,7 @@ class MainActivity : ComponentActivity() {
 
         if (allPermissionsGranted) {
             startCameraPreview()
-            fetchLatestImageFromGallery()
+//            fetchLatestImageFromGallery()
         } else {
             permissionsRequest.launch(permissions)
         }
@@ -185,99 +187,9 @@ class MainActivity : ComponentActivity() {
                             .border(1.dp, Color.White, CircleShape)
                     )
                 }
-
-                // Camera flip button
-                /*IconButton(
-                    onClick = {
-                        flipCamera() // Flip the camera when clicked
-                    },
-                    modifier = Modifier
-                        .align(Alignment.CenterEnd)
-                        .size(72.dp)
-                        .padding(end = 16.dp)
-                        .clip(CircleShape)
-                ) {
-                    Icon(
-                        imageVector = Icons.Sharp.FlipCameraAndroid,
-                        contentDescription = "Flip Camera",
-                        tint = Color.White,
-                        modifier = Modifier.size(40.dp)
-                    )
-                }*/
-
-                // Display the captured image thumbnail using Coil
-                /*latestImagePath?.let { path ->
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.CenterStart) // Vertically centered within the bottom box
-                            .padding(start = 16.dp)
-                            .size(60.dp) // Adjust the size as desired
-                            .clip(RoundedCornerShape(8.dp)) // Make it square with rounded corners
-                            .background(Color.Gray)
-                            .clickable { openGallery() } // Opens gallery when clicked
-                    ) {
-                        Image(
-                            painter = rememberAsyncImagePainter(model = path), // Use the URI directly
-                            contentDescription = "Captured Image",
-                            contentScale = ContentScale.Crop, // Ensure the image is cropped to fit the square
-                            modifier = Modifier
-                                .fillMaxSize() // Ensure it fills the square box
-                                .clip(RoundedCornerShape(8.dp)) // Ensure image fits square box with rounded corners
-                        )
-                    }
-                }*/
             }
         }
     }
-
-    @Composable
-    fun GridOverlay(
-        lineColor: Color = Color.White.copy(alpha = 0.6f), // Color of grid lines
-        lineWidth: Float = 2f, // Width of grid lines
-        bottomBoxHeight: Float = 120f // Height of the bottom box in dp
-    ) {
-        Canvas(modifier = Modifier.fillMaxSize()) {
-            // Calculate the available height excluding the bottom box
-            val availableHeight = size.height
-
-            // Use the full available width for the grid
-            val availableWidth = size.width
-
-            // Calculate the width of each column and height of each row
-            val columnWidth = availableWidth / 3
-            val rowHeight = availableHeight / 3
-
-            // Draw vertical lines
-            for (i in 1 until 3) {
-                val x = columnWidth * i
-                drawLine(
-                    color = lineColor,
-                    start = Offset(x, 0f),
-                    end = Offset(x, availableHeight),
-                    strokeWidth = lineWidth,
-                    cap = StrokeCap.Round
-                )
-            }
-
-            // Draw horizontal lines
-            for (i in 1 until 3) {
-                val y = rowHeight * i
-                drawLine(
-                    color = lineColor,
-                    start = Offset(0f, y),
-                    end = Offset(availableWidth, y),
-                    strokeWidth = lineWidth,
-                    cap = StrokeCap.Round
-                )
-            }
-        }
-    }
-
-
-
-
-
-
 
     private fun setUpCamera() {
         cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
@@ -319,13 +231,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private fun flipCamera() {
-        closeCamera() // Close the current camera
-        isUsingFrontCamera = !isUsingFrontCamera // Toggle the camera
-        startCameraPreview() // Restart the camera preview
-    }
-
-
     private fun openCamera() {
         try {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
@@ -349,38 +254,6 @@ class MainActivity : ComponentActivity() {
             Log.e("CameraError", "Failed to open camera", e)
         }
     }
-
-    private fun fetchLatestImageFromGallery() {
-        val projection = arrayOf(
-            MediaStore.Images.Media._ID,
-            MediaStore.Images.Media.DISPLAY_NAME,
-            MediaStore.Images.Media.DATE_ADDED
-        )
-
-        val sortOrder = "${MediaStore.Images.Media.DATE_ADDED} DESC"
-
-        val query = contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            null,
-            null,
-            sortOrder
-        )
-
-        query?.use { cursor ->
-            val idColumn = cursor.getColumnIndexOrThrow(MediaStore.Images.Media._ID)
-
-            if (cursor.moveToFirst()) {
-                val id = cursor.getLong(idColumn)
-                val contentUri = MediaStore.Images.Media.EXTERNAL_CONTENT_URI.buildUpon()
-                    .appendPath(id.toString()).build()
-
-                latestImagePath = contentUri.toString() // Update the latestImagePath with the URI
-            }
-        }
-    }
-
-
 
     @RequiresApi(Build.VERSION_CODES.P)
     private fun createCameraPreviewSession() {
@@ -458,97 +331,21 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-
-
-    private fun captureImage() {
-        try {
-            val captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_STILL_CAPTURE)
-            captureRequestBuilder.addTarget(imageReader.surface)
-            imageReader.setOnImageAvailableListener({ reader ->
-                val image = reader.acquireLatestImage()
-                val buffer = image.planes[0].buffer
-                val bytes = ByteArray(buffer.remaining())
-                buffer.get(bytes)
-
-                // Save the image with proper orientation
-                saveImage(bytes)
-                image.close()
-            }, null)
-
-            cameraCaptureSession.capture(captureRequestBuilder.build(), object : CameraCaptureSession.CaptureCallback() {
-                override fun onCaptureCompleted(session: CameraCaptureSession, request: CaptureRequest, result: TotalCaptureResult) {
-                    super.onCaptureCompleted(session, request, result)
-                    showToastAtTop("Image Captured")
-                }
-            }, null)
-        } catch (e: CameraAccessException) {
-            Log.e("CameraError", "Error capturing image", e)
-        }
-    }
-
-    /*private fun saveImage(bytes: ByteArray) {
-        // Convert byte array to Bitmap
-        val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-
-        // Adjust the orientation of the image
-        val rotatedBitmap = adjustImageRotation(originalBitmap)
-
-        val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())}.jpg"
-        val file = File(getExternalFilesDir(Environment.DIRECTORY_PICTURES), filename)
-
-        FileOutputStream(file).use { outputStream ->
-            rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-        }
-
-        // Update the latestImagePath with the saved image's path
-        latestImagePath = file.absolutePath
-    }*/
-
     private fun saveImage(bytes: ByteArray) {
-        Thread {
-            // Convert byte array to Bitmap
-            val originalBitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+        val filename = "IMG_${System.currentTimeMillis()}.jpeg"
+        val contentValues = ContentValues().apply {
+            put(MediaStore.MediaColumns.DISPLAY_NAME, filename)
+            put(MediaStore.MediaColumns.MIME_TYPE, "image/jpeg")
+            put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_PICTURES)
+        }
 
-            // Adjust the orientation of the image
-            val rotatedBitmap = adjustImageRotation(originalBitmap)
+        val uri = contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
+        contentResolver.openOutputStream(uri!!).use {
+            it?.write(bytes)
+        }
 
-            // Prepare to save the image in the public Pictures directory
-            val filename = "IMG_${SimpleDateFormat("yyyyMMdd_HHmmss_SSS", Locale.US).format(Date())}.jpg"
-            val resolver = contentResolver
-            val contentValues = ContentValues().apply {
-                put(MediaStore.Images.Media.DISPLAY_NAME, filename)
-                put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/EagleEye") // Save in Pictures/EagleEye folder
-                put(MediaStore.Images.Media.IS_PENDING, 1) // For API 29+
-            }
-
-            val imageUri = resolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, contentValues)
-
-            // Save the image to the gallery
-            imageUri?.let { uri ->
-                resolver.openOutputStream(uri).use { outputStream ->
-                    if (outputStream != null) {
-                        rotatedBitmap.compress(Bitmap.CompressFormat.JPEG, 100, outputStream)
-                        outputStream.flush()
-                        contentValues.clear()
-                        contentValues.put(MediaStore.Images.Media.IS_PENDING, 0) // Mark image as ready for viewing
-                        resolver.update(uri, contentValues, null, null) // For API 29+
-                        latestImagePath = uri.toString() // Store the URI path for the latest image
-
-                        // Fetch the latest image from the gallery
-                        fetchLatestImageFromGallery()
-                    } else {
-                        Log.e("SaveImageError", "Failed to save image")
-                    }
-                }
-            }
-        }.start()
+        Toast.makeText(this, "Image captured and saved.", Toast.LENGTH_SHORT).show()
     }
-
-
-
-
 
     // Function to adjust image rotation based on device orientation
     private fun adjustImageRotation(bitmap: Bitmap): Bitmap {
@@ -578,26 +375,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-
-
-    private fun openGallery() {
-        latestImagePath?.let { path ->
-            val uri = android.net.Uri.parse(path) // Parse the content URI
-
-            val intent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(uri, "image/*")
-                addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION) // Grant temporary read permission
-            }
-
-            try {
-                startActivity(intent)
-            } catch (e: Exception) {
-                showToastAtTop("Unable to open image")
-            }
-        } ?: showToastAtTop("No image available")
-    }
-
-    // clean up
     private fun closeCamera() {
         try {
             if (::cameraCaptureSession.isInitialized) {
