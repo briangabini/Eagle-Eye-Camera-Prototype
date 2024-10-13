@@ -154,7 +154,7 @@ class MainActivity : ComponentActivity() {
                     .fillMaxWidth()
             ) {
                 CameraPreview() // Camera preview
-                GridOverlay()   // Grid overlay on top of the preview
+//                GridOverlay()   // Grid overlay on top of the preview
             }
 
             // Semi-transparent container for the capture button and other UI elements
@@ -187,7 +187,7 @@ class MainActivity : ComponentActivity() {
                 }
 
                 // Camera flip button
-                IconButton(
+                /*IconButton(
                     onClick = {
                         flipCamera() // Flip the camera when clicked
                     },
@@ -203,10 +203,10 @@ class MainActivity : ComponentActivity() {
                         tint = Color.White,
                         modifier = Modifier.size(40.dp)
                     )
-                }
+                }*/
 
                 // Display the captured image thumbnail using Coil
-                latestImagePath?.let { path ->
+                /*latestImagePath?.let { path ->
                     Box(
                         modifier = Modifier
                             .align(Alignment.CenterStart) // Vertically centered within the bottom box
@@ -225,7 +225,7 @@ class MainActivity : ComponentActivity() {
                                 .clip(RoundedCornerShape(8.dp)) // Ensure image fits square box with rounded corners
                         )
                     }
-                }
+                }*/
             }
         }
     }
